@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>
+
+<style>
+    body {
+        margin: 0;
+    }
+
+    .absolute {
+        position: absolute;
+    }
+
+    .stop-scrolling {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .button {
+        background-color: black;
+        border-radius: 20%;
+        color: white;
+        cursor: pointer;
+    }
+</style>
+
+<head>
+    <meta charset="utf-8">
+    <title>Car Game</title>
+</head>
+
+<body>
+    <div class="absolute" style="text-align:center; height: 200px; width: 500px; left: 35%;">
+        <h2 id="displayScore"></h2>
+        <button class="button" onClick="window.location.reload()">Restart</button>
+    </div>
+
+    <div class="absolute" style="position: absolute; top: 60%; left: 30%; width: 700px; height: 100px; text-align:center;">
+        <h1 id="displayWin" style="color: black;"></h1>
+    </div>
+
+    <script type="module">
+
+        const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 10000);
+            const renderer = new THREE.WebGLRenderer();
+            scene.fog = new THREE.Fog(0x000000, 10, 10000);
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            //Stops scroll bar
+            function stopScroll() {
+                document.body.classList.add("stop-scrolling");
+            }
+            stopScroll();
+
+            //Variables
+            renderer.setClearColor(0x87CEEB);
+            camera.position.x = -177;
+            camera.position.y = 93;
+            camera.position.z = -80;
+            var score = 0;
+            var speed = 1;
+            var obstacleAmount = 150;
+            var cloudAmount = 200;
+            var treeAmount = 300;
+            var life = true;
+            var alternate = true;
+             //Array items
+            var obstacleArray = [];
+            var obstacleBBArray = [];
+            var cloudArray = [];
+            var treeArray = [];
+            var leafArray = [];
+            let mainBB = new THREE.Box3(new THREE.Vector3(), new THREE.Vector3());
+            const main = new THREE.Mesh(
+                    new THREE.BoxBufferGeometry(60, 15, 30),
+                    new THREE.MeshPhongMaterial({ color: 0xFF0000 })
+                );
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+
+            //Class that creates obstacles
+            class Obstacles {
+
+                constructor(obstacleX, obstacleY, obstacleZ) {
+                    this.obstacleX = obstacleX;
+                    this.obstacleY = obstacleY;
+                    this.obstacleZ = obstacleZ;
+                }
+
+                
+
+                createObstacle() {
+                    const geometry = new THREE.ConeGeometry(10, 20, 10);
+                    //const geometry = new THREE.BoxGeometry(10, 20, 10);
+                    let material = new THREE.MeshLambertMaterial({
+                        color: 0xEC5800
+                    });
+                    const obstacle = new THREE.Mesh(geometry, material);
+                    obstacle.position.set(this.obstacleX, this.obstacleY, this.obstacleZ);
+                    scene.add(obstacle);
+                    obstacle.castShadow = true;
+                    obstacle.receiveShadow = true;
+
+                    //Creates a obstacle bounding box for collision detection
+                    let obstacleBB = new THREE.Box3(new THREE.Vector3(), new THREE.Vector3());
+                    obstacleBB.setFromObject(obstacle);
+                    obstacleBBArray.push(obstacleBB);
+                    
+                    //console.log(obstacleBB);
+                }
+
+            }
+
+            //Class that creates clouds
+            class Clouds {
+
+                constructor(cloudX, cloudY, cloudZ) {
+                    this.cloudX = cloudX;
+                    this.cloudY = cloudY;
+                    this.cloudZ = cloudZ;
+                }
+
+                
+
+                createCloud() {
+                    const geometry = new THREE.BoxGeometry(100, 20, 100);
+                    let material = new THREE.MeshLambertMaterial({
+                        color: 0xFFFFFF,
+                        transparent: true,
+                        opacity: 0.5,
+                    });
+                    const cloud = new THREE.Mesh(geometry, material);
+                    cloud.position.set(this.cloudX, this.cloudY, this.cloudZ);
+                    scene.add(cloud);
+                    cloud.castShadow = false;
+                }
+
+            }
+
+            //Class that creates Trees
+            class Trees{
+                constructor(treeX, treeY, treeZ) {
+                    this.treeX = treeX;
+                    this.treeY = treeY;
+                    this.treeZ = treeZ;
+                }
+
+                createTree() {
+
+                    let geo2 = new THREE.BoxGeometry(10, 60, 10);
+                    let mat2 = new THREE.MeshPhongMaterial({ 
+                        color: 0x5C4033
+                        });
+                    const trunk = new THREE.Mesh(geo2, mat2);
+                    trunk.position.x = this.treeX;
+                    trunk.position.y = this.treeY;
+                    trunk.position.z = this.treeZ;
+                    trunk.castShadow = true;
+                    trunk.receiveShadow = true;
+                    scene.add(trunk);
+
+                    let geo1 = new THREE.OctahedronGeometry(30, 3);
+                    let mat1 = new THREE.MeshPhongMaterial({ 
+                        color: 0x3A5F0B
+                        });
+                    const leaves = new THREE.Mesh(geo1, mat1);
+                    leaves.position.x = this.treeX;
+                    leaves.position.y = this.treeY + 35;
+                    leaves.position.z = this.treeZ;
+                    leaves.castShadow = true;
+                    leaves.receiveShadow = true;
+                    scene.add(leaves);
+                    
+                    //Creating wireframe on top of leaves
+                    var edgesGeo = new THREE.EdgesGeometry(leaves.geometry);
+                    var lbm = new THREE.LineBasicMaterial({ color: 0x013220 });
+                    var wireframe = new THREE.LineSegments(edgesGeo, lbm);
+                    leaves.add(wireframe);
+                }
+
+            }
+
+            //Creates wheels for car
+            function createWheels() {
+                const geometry = new THREE.CylinderGeometry(6, 6, 33, 15);
+                const material = new THREE.MeshPhongMaterial({ color: 0x333333 });
+                const wheel = new THREE.Mesh(geometry, material);
+                wheel.rotation.x = 0.5 * Math.PI;
+                return wheel;
+            }
+
+            //Creates full car
+            function createCar() {
+                const car = new THREE.Group();
+
+                const backWheel = createWheels();
+                backWheel.position.y = 6;
+                backWheel.position.x = -18;
+                backWheel.castShadow = true;
+                car.add(backWheel);
+
+                const frontWheel = createWheels();
+                frontWheel.position.y = 6;
+                frontWheel.position.x = 18;
+                frontWheel.castShadow = true;
+                car.add(frontWheel);
+
+                main.position.y = 12;
+                main.castShadow = true;
+                car.add(main);
+
+                mainBB.setFromObject(main);
+
+                const cabin = new THREE.Mesh(
+                    new THREE.BoxBufferGeometry(33, 12, 24),
+                    new THREE.MeshPhongMaterial({ color: 0xffffff })
+                );
+                cabin.position.x = -6;
+                cabin.position.y = 25.5;
+                cabin.castShadow = true;
+                car.add(cabin);
+
+                return car;
+            }
+
+            //Gets rood markings
+            function getRoadMarkings() {
+                const canvas = document.createElement("canvas");
+                canvas.width = 300;
+                canvas.height = 100;
+                const context = canvas.getContext("2d");
+
+                context.fillStyle = "#808080";
+                context.fillRect(0, 0, 1000, 200);
+
+                context.fillStyle = "#ffffff";
+
+                context.fillRect(10, 47, 10, 5);
+                context.fillRect(30, 47, 10, 5);
+                context.fillRect(50, 47, 10, 5);
+                context.fillRect(70, 47, 10, 5);
+                context.fillRect(90, 47, 10, 5);
+                context.fillRect(110, 47, 10, 5);
+                context.fillRect(130, 47, 10, 5);
+                context.fillRect(150, 47, 10, 5);
+                context.fillRect(170, 47, 10, 5);
+                context.fillRect(190, 47, 10, 5);
+                context.fillRect(210, 47, 10, 5);
+                context.fillRect(230, 47, 10, 5);
+                context.fillRect(250, 47, 10, 5);
+                context.fillRect(270, 47, 10, 5);
+                context.fillRect(290, 47, 10, 5);
+
+
+                return new THREE.CanvasTexture(canvas);
+            }
+
+            function createRoad() {
+                const road = new THREE.Group();
+                const roadMarkings = getRoadMarkings();
+
+                const main = new THREE.Mesh(
+                    new THREE.BoxGeometry(25000, 1, 200),
+                    new THREE.MeshLambertMaterial({ map: roadMarkings }),
+                    new THREE.MeshLambertMaterial({ color: 0x808080 })
+                );
+                main.position.set(9000, 0, 0);
+                main.receiveShadow = true;
+                road.add(main);
+
+                return road;
+            }
+
+            function createGrass() {
+                const grass = new THREE.Group();
+
+                const main = new THREE.Mesh(
+                    new THREE.BoxGeometry(25000, 1, 2500),
+                    new THREE.MeshLambertMaterial({ color: 0x7CFC00, wireframe: false })
+                );
+                main.position.set(9000, -1, 0);
+                main.receiveShadow = true;
+                scene.add(main);
+
+                return grass;
+            }
+
+            //Calculate random num
+            function randomNumber(min, max) {
+                return Math.floor(Math.random() * (max - min + 1) + min);
+            }
+
+            //Function for Collision detection
+            function collisionDetection(){
+
+                for (let i = 0; i < obstacleArray.length; i++) {
+                    //console.log(obstacleBBArray[i]);
+                    if(mainBB.intersectsBox(obstacleBBArray[i])){
+                        console.log("Collsion");
+                        life = false;
+                    }
+                }
+
+            }
+
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(-175, 111, -90);
+            light.castShadow = true; // default false
+            scene.add(light );
+            
+            light.shadow.camera.left = -1500;
+            light.shadow.camera.right = 1500;
+            light.shadow.camera.top = 1000;
+            light.shadow.camera.bottom = -1000;
+
+            light.shadow.mapSize.x = 5048;
+            light.shadow.mapSize.y = 5048;
+            
+            //Shadow Helper
+            //const helper = new THREE.CameraHelper(light.shadow.camera);
+            //scene.add(helper);
+            
+            const car = createCar();
+            const road = createRoad();
+            const grass = createGrass();
+
+            //adding car grass and road to world
+            scene.add(road);
+            scene.add(grass);
+            scene.add(car);
+
+            //keypress with jQueYry
+            $(document.body).on('keydown', function (e) {
+                //console.log(e.which);
+                switch (e.which) {
+                    // key code for left arrow
+                    case 37:
+                        //console.log('left arrow key pressed!');
+                        car.position.z += -10;
+                        camera.position.z += -10;
+                        car.position.x += 10;
+                        camera.position.x += 10;
+                        light.position.x += 10;
+                        score += 10;
+                        //car.rotation.y += 0.1;
+                        break;
+
+                    // key code for right arrow
+                    case 39:
+                        //console.log('right arrow key pressed!');
+                        car.position.z += 10;
+                        camera.position.z += 10;
+                        car.position.x += 10;
+                        camera.position.x += 10;
+                        light.position.x += 10;
+                        score += 10;
+                        //car.rotation.y += -0.1;
+                        break;
+
+                    // key code for up arrow
+                    case 38:
+                        //console.log('up arrow key pressed!');
+                        car.position.x += 10;
+                        camera.position.x += 10;
+                        light.position.x += 10;
+                        score += 10;
+                        break;
+
+                    // key code for bottom arrow
+                    case 40:
+                        //console.log('right arrow key pressed!');
+                        car.position.x += -10;
+                        camera.position.x += -10;
+                        light.position.x += -10;
+                        score += -10;
+                        break;
+                }
+            });
+
+            //Create a array of random obstacles
+            for (let i = 0; i < obstacleAmount; i++) {
+                var obstacleX = randomNumber(100, 19899);
+                var obstacleY = 10;
+                var obstacleZ = randomNumber(-95, 95);
+                obstacleArray.push(new Obstacles(obstacleX, obstacleY, obstacleZ));
+                obstacleArray[i].createObstacle();
+            }
+
+            //Create a array of random clouds
+            for (let i = 0; i < cloudAmount; i++) {
+                var cloudX = randomNumber(100, 19899);
+                var cloudY = randomNumber(200, 375);
+                var cloudZ = randomNumber(-1250, 1250);
+                cloudArray.push(new Clouds(cloudX, cloudY, cloudZ));
+                cloudArray[i].createCloud();
+            }
+
+            //Create a array of random trees on the left
+            for (let i = 0; i < treeAmount; i++) {
+                var treeX = randomNumber(100, 19899);
+                var treeY = 10;
+                
+                //Alternates so trees are on both sides
+                if(alternate == true){
+                    var treeZ = randomNumber(-1150, -150);
+                    alternate = false;
+                }else{
+                    var treeZ = randomNumber(150, 1150);
+                    alternate = true;
+                }
+                treeArray.push(new Trees(treeX, treeY, treeZ));
+                treeArray[i].createTree();
+            }
+
+            function repeatMe() {
+                renderer.render(scene, camera);
+                
+                light.target = car;
+                car.position.x += 2;
+                camera.position.x += 2;
+                light.position.x += 2;
+                score += 1;
+
+                console.log(car.position.x);
+                mainBB.copy(main.geometry.boundingBox).applyMatrix4(main.matrixWorld);
+                collisionDetection();
+
+                //Updating score
+                document.getElementById('displayScore').innerHTML = "Score: " + score;
+
+                if (car.position.x > 15000 ) {
+                    document.getElementById('displayWin').innerHTML = "You have reached the end and have passed your driving test!!!";
+                } else if(life == false){
+                    document.getElementById('displayWin').innerHTML = "You have crashed your car and have got a score of " + score +" on your driving test!!!";
+                }else{
+                    requestAnimationFrame(repeatMe);
+                }
+            }
+
+            repeatMe();
+        </script>
+</body>
+
+</html>
